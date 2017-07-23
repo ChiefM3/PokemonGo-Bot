@@ -158,8 +158,8 @@ class PokemonGoBot(object):
             saved_info[key] = self.config.client_id
         saved_info.close()
 
-    def start(self):
-        self._setup_event_system()
+    def start(self, bot):
+        self._setup_event_system(bot)
         self.sleep_schedule = SleepSchedule(self, self.config.sleep_schedule) if self.config.sleep_schedule else None
         if self.sleep_schedule:
             self.sleep_schedule.work()
@@ -174,7 +174,7 @@ class PokemonGoBot(object):
 
         random.seed()
 
-    def _setup_event_system(self):
+    def _setup_event_system(self, bot):
         handlers = []
 
         color = self.config.logging and 'color' in self.config.logging and self.config.logging['color']
@@ -199,7 +199,7 @@ class PokemonGoBot(object):
                 remote_control = WebsocketRemoteControl(self).start()
 
         # @var EventManager
-        self.event_manager = EventManager(self.config.walker_limit_output, *handlers)
+        self.event_manager = EventManager(bot, self.config.walker_limit_output, *handlers)
         self._register_events()
         if self.config.show_events:
             self.event_manager.event_report()
@@ -372,6 +372,7 @@ class PokemonGoBot(object):
             'moving_to_fort',
             parameters=(
                 'fort_name',
+                'target_type',
                 'distance'
             )
         )
@@ -379,6 +380,7 @@ class PokemonGoBot(object):
             'moving_to_lured_fort',
             parameters=(
                 'fort_name',
+                'target_type',
                 'distance',
                 'lure_distance'
             )
@@ -386,7 +388,7 @@ class PokemonGoBot(object):
         self.event_manager.register_event(
             'spun_pokestop',
             parameters=(
-                'pokestop', 'exp', 'items'
+                'pokestop', 'exp', 'items', 'stop_kind', 'spin_amount_now'
             )
         )
         self.event_manager.register_event(
@@ -559,6 +561,8 @@ class PokemonGoBot(object):
         self.event_manager.register_event('catch_limit')
         self.event_manager.register_event('spin_limit')
         self.event_manager.register_event('show_best_pokemon', parameters=('pokemons'))
+        self.event_manager.register_event('revived_pokemon')
+        self.event_manager.register_event('healing_pokemon')
 
         # level up stuff
         self.event_manager.register_event(
@@ -1715,6 +1719,25 @@ class PokemonGoBot(object):
             ))
 
         return forts
+
+        if order_by_distance:
+            forts.sort(key=lambda x: distance(
+                self.position[0],
+                self.position[1],
+                x['latitude'],
+                x['longitude']
+            ))
+
+        return forts
+    
+    def get_gyms(self, order_by_distance=False):
+        forts = [fort
+                 for fort in self.cell['forts']
+                 if 'latitude' in fort and 'type' not in fort]
+        # Need to filter out disabled gyms!
+        forts = filter(lambda x: x["enabled"] is True, forts)
+        forts = filter(lambda x: 'closed' not in fort, forts)
+        # forts = filter(lambda x: 'type' not in fort, forts)
 
         if order_by_distance:
             forts.sort(key=lambda x: distance(
